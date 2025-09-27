@@ -1,6 +1,6 @@
 # easy-crawler
 
-一个简单易用的网页内容智能提取工具，可以自动提取网页中的文章标题、正文、图片等信息，支持静态和动态页面。
+一个简单易用的网页内容智能提取工具，可以自动提取网页中的文章标题、正文、图片等信息，支持静态和动态页面，并提供向量数据库支持用于高效语义搜索和数据持久化。
 
 ## 项目特点
 
@@ -12,11 +12,15 @@
 - 灵活的数据持久化模块，支持多种存储方式
 - 中国家电网专用频道爬虫，支持多种频道和模块
 - LLM文档分析功能，可自动分析爬取的文档并生成简要报告
+- FAISS向量数据库支持，提供高效的语义搜索和时间范围查询功能
 
 ## 环境安装
 
 ```bash
 pip install trafilatura readability-lxml requests beautifulsoup4 selenium webdriver-manager pandas tqdm
+
+# 安装向量数据库相关依赖
+pip install faiss-cpu sentence-transformers
 ```
 
 ## 更新方法
@@ -39,7 +43,7 @@ git pull origin main
 
 ```bash
 # 更新所有已安装的包
-pip install -U trafilatura readability-lxml requests beautifulsoup4 selenium webdriver-manager pandas tqdm
+pip install -U trafilatura readability-lxml requests beautifulsoup4 selenium webdriver-manager pandas tqdm faiss-cpu sentence-transformers
 
 # 或者使用requirements.txt文件（如果项目提供了）
 # pip install -U -r requirements.txt
@@ -154,6 +158,7 @@ SITE_CONFIGS = {
 
 - 基于策略模式设计，易于扩展新的持久化方式
 - 支持JSON文件存储、HTML报告生成、API调用和数据库存储
+- 支持FAISS向量数据库存储
 - 提供统一的接口进行数据保存
 - 单例模式的管理器，方便全局使用
 
@@ -171,6 +176,9 @@ manager.save_with_method('json', data, 'output.json')
 # 生成HTML报告
 manager.save_with_method('html_report', data)
 
+# 保存到FAISS向量数据库
+manager.save_with_method('faiss', data)
+
 # 使用API保存数据（需要在配置中设置API地址）
 # manager.save_with_method('api', data)
 
@@ -182,6 +190,7 @@ manager.save_with_method('html_report', data)
 
 - **JSON文件**: 将数据保存为JSON格式文件
 - **HTML报告**: 生成可视化的HTML报告
+- **FAISS向量数据库**: 将数据转换为向量并保存到FAISS索引，支持高效语义搜索
 - **API调用**: 将数据通过HTTP请求发送到指定API
 - **数据库**: 将数据直接保存到数据库（预留接口，需自行实现具体数据库连接）
 
@@ -247,7 +256,229 @@ python -m src.business.cheaa_crawler crawl --channels icebox ac --modules xinpin
 python -m src.business.cheaa_crawler crawl --channels icebox ac --modules xinpin --use-selenium
 ```
 
+## 中国家电网完整爬虫
+
+`scripts/cheaa_full_crawler.py`提供了更完整的中国家电网爬取流程，先获取文章链接，再爬取详细内容，并支持自动保存到FAISS向量数据库：
+
+### 使用方法
+
+```bash
+# 爬取指定频道和模块的内容
+source activate crawler_env
+python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin --output icebox_xinpin_result.json
+
+# 使用Selenium爬取
+python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin --use-selenium
+
+# 限制爬取文章数量
+python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin --batch-size 10
+
+# 修改请求间隔时间
+python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin --delay 3
+```
+
+## 向量数据库功能
+
+`src/storage/vector_db.py`提供了基于FAISS的向量数据库功能，支持高效的语义搜索和时间范围查询：
+
+### 功能特点
+
+- 自动将文档内容转换为向量表示
+- 支持高效的语义相似度搜索
+- 支持按日期范围查询文档
+- 提供统计信息查询功能
+- 数据持久化存储，支持索引和元数据保存
+- 支持自定义嵌入模型
+
+### 使用方法
+
+#### 1. 保存数据到向量数据库
+
+在使用爬虫工具时，数据会自动保存到向量数据库。也可以手动保存：
+
+```python
+from src.storage.vector_db import FAISSPersistence
+
+# 创建向量数据库实例
+vector_db = FAISSPersistence(
+    index_path='vector_index.faiss',  # 索引文件路径
+    metadata_path='vector_metadata.json',  # 元数据文件路径
+    embedding_model='all-MiniLM-L6-v2'  # 嵌入模型名称
+)
+
+# 保存数据
+result = vector_db.save(data)  # data可以是单个文档字典或文档列表
+print(result)
+```
+
+#### 2. 语义搜索
+
+```python
+# 搜索相关文档
+results = vector_db.search(
+    query="冰箱新品上市",  # 搜索查询
+    top_k=5,  # 返回结果数量
+    start_date="2025-09-01",  # 可选，开始日期
+    end_date="2025-09-30"  # 可选，结束日期
+)
+
+# 打印搜索结果
+for i, result in enumerate(results):
+    print(f"{i+1}. {result['title']} (相似度: {result['distance']:.4f})")
+    print(f"   URL: {result['url']}")
+    print(f"   摘要: {result.get('summary', '无摘要')}\n")
+```
+
+#### 3. 按日期范围查询
+
+```python
+# 查询指定日期范围内的文档
+from datetime import datetime, timedelta
+
+# 获取最近10天的文档
+end_date = datetime.now().strftime('%Y-%m-%d')
+start_date = (datetime.now() - timedelta(days=10)).strftime('%Y-%m-%d')
+
+recent_docs = vector_db.get_by_date_range(
+    start_date=start_date,
+    end_date=end_date,
+    top_k=20  # 返回结果数量
+)
+
+# 打印查询结果
+print(f"最近10天的文档 ({start_date} 至 {end_date}):")
+for i, doc in enumerate(recent_docs):
+    print(f"{i+1}. {doc['title']}")
+    print(f"   发布时间: {doc.get('publish_time', '未知')}")
+    print(f"   URL: {doc['url']}\n")
+```
+
+#### 4. 获取统计信息
+
+```python
+# 获取向量数据库统计信息
+stats = vector_db.get_statistics()
+print("向量数据库统计信息:")
+import json
+print(json.dumps(stats, ensure_ascii=False, indent=2))
+```
+
+### 命令行工具
+
+项目提供了专用的向量数据库查询工具`scripts/vector_query.py`：
+
+```bash
+# 语义搜索
+python scripts/vector_query.py search "冰箱新品上市" --top-k 5
+
+# 语义搜索并限制日期范围
+python scripts/vector_query.py search "空调技术趋势" --top-k 5 --start-date 2025-09-01 --end-date 2025-09-30
+
+# 查询最近10天的文档
+python scripts/vector_query.py recent --days 10 --top-k 10
+
+# 查询指定日期范围的文档
+python scripts/vector_query.py date-range --start-date 2025-09-01 --end-date 2025-09-30 --top-k 20
+
+# 查看向量数据库统计信息
+python scripts/vector_query.py stats
+```
+
+## LLM文档分析功能
+
+easy-crawler提供了强大的LLM文档分析功能，可以自动分析爬取的文档内容并生成简要报告。
+
+### 功能特点
+
+- 自动分析文档内容，提取摘要、关键词和关键点
+- 支持批量分析多个文档
+- 生成直观的HTML分析报告
+- 可扩展支持真实的LLM API调用（如OpenAI、百度文心一言等）
+
+### 使用方法
+
+使用提供的命令行脚本可以快速分析爬取的文档：
+
+```bash
+# 分析单个文档文件
+python analyze_documents.py extraction_results.json
+
+# 分析多个文档文件
+python analyze_documents.py file1.json file2.json file3.json
+
+# 指定输出目录
+python analyze_documents.py extraction_results.json --output-dir my_reports
+
+# 只生成HTML报告（不生成JSON结果）
+python analyze_documents.py extraction_results.json --no-json
+
+# 只生成JSON结果（不生成HTML报告）
+python analyze_documents.py extraction_results.json --no-html
+```
+
+### 分析结果包含
+
+- 文档标题和URL
+- 发布时间（如果有）
+- 内容摘要
+- 关键词提取
+- 关键点总结
+
+### 直接使用API
+
+```python
+from llm_analyzer import LLMAnalyzer
+
+# 创建分析器实例
+analyzer = LLMAnalyzer()
+
+# 加载文档
+# 可以是单个文档字典，也可以是文档列表
+# documents = [{'title': '文档标题', 'content': '文档内容', ...}]
+documents = analyzer.load_documents_from_json('extraction_results.json')
+
+# 分析文档
+results = analyzer.batch_analyze(documents)
+
+# 保存分析结果
+analyzer.save_analysis_results(results, 'analysis_results.json')
+
+# 生成HTML报告
+analyzer.generate_analysis_report(results, 'analysis_report.html')
+```
+
+### 集成真实LLM API
+
+目前的实现使用模拟分析结果。要集成真实的LLM API，请修改`LLMAnalyzer`类中的`use_real_llm`属性为`True`，并实现`_call_llm_api`方法：
+
+```python
+# 在llm_analyzer.py中添加
+class LLMAnalyzer:
+    def __init__(self):
+        self.use_real_llm = True  # 设置为True使用真实LLM API
+        # 初始化LLM API客户端
+        # 例如OpenAI API
+        # import openai
+        # openai.api_key = 'your-api-key'
+    
+    def _call_llm_api(self, content):
+        """调用实际的LLM API进行分析"""
+        # 实现实际的API调用
+        # 例如：
+        # response = openai.ChatCompletion.create(
+        #     model="gpt-3.5-turbo",
+        #     messages=[
+        #         {"role": "system", "content": "你是一个文档分析助手，..."},
+        #         {"role": "user", "content": f"分析以下文档内容：{content[:2000]}"}
+        #     ]
+        # )
+        # # 解析API响应并返回分析结果
+        # return self._parse_llm_response(response)
+        pass
+```
+
 ## 项目结构
+
 
 ```
 easy-crawler/

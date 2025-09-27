@@ -21,6 +21,18 @@ from src.business.cheaa_crawler import CheaaChannelCrawler
 from src.core.crawler import UniversalWebExtractor
 from src.storage.data_persistence import get_default_manager
 
+# 尝试导入并注册FAISS持久化
+try:
+    from src.storage.vector_db import FAISSPersistence
+    # 获取默认管理器
+    default_manager = get_default_manager()
+    # 注册FAISS持久化（如果尚未注册）
+    if 'faiss' not in default_manager.persistence_methods:
+        default_manager.register_persistence('faiss', FAISSPersistence())
+        print("成功注册FAISS持久化")
+except Exception as e:
+    print(f"注册FAISS持久化失败: {e}")
+
 class CheaaFullCrawler:
     """中国家电网完整爬虫"""
     
@@ -30,6 +42,15 @@ class CheaaFullCrawler:
         self.persistence_manager = get_default_manager()
         self.article_urls = []
         
+        # 再次检查FAISS是否注册成功
+        if 'faiss' not in self.persistence_manager.persistence_methods:
+            try:
+                from src.storage.vector_db import FAISSPersistence
+                self.persistence_manager.register_persistence('faiss', FAISSPersistence())
+                print("在爬虫初始化时成功注册FAISS持久化")
+            except Exception as e:
+                print(f"在爬虫初始化时注册FAISS持久化失败: {e}")
+
     def get_article_urls(self, channel_keys=None, module_keys=None, use_selenium=False):
         """获取文章URL列表"""
         self.article_urls = self.channel_crawler.get_article_urls_and_titles(
@@ -138,6 +159,12 @@ class CheaaFullCrawler:
             # 生成HTML报告
             html_report_file = output_file.replace('.json', '_report.html')
             self.persistence_manager.save_with_method('html_report', results, html_report_file)
+            
+            # 保存到FAISS向量数据库（如果可用）
+            if 'faiss' in self.persistence_manager.persistence_methods:
+                self.persistence_manager.save_with_method('faiss', results)
+            else:
+                print("FAISS持久化不可用，跳过向量数据库保存")
         else:
             # 使用默认文件名
             timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -147,6 +174,12 @@ class CheaaFullCrawler:
             # 生成HTML报告
             html_report_file = default_output.replace('.json', '_report.html')
             self.persistence_manager.save_with_method('html_report', results, html_report_file)
+            
+            # 保存到FAISS向量数据库（如果可用）
+            if 'faiss' in self.persistence_manager.persistence_methods:
+                self.persistence_manager.save_with_method('faiss', results)
+            else:
+                print("FAISS持久化不可用，跳过向量数据库保存")
         
         return results
 

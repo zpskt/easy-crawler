@@ -14,6 +14,13 @@ from tqdm import tqdm
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+# 尝试导入向量数据库相关模块
+try:
+    from src.storage.vector_db import FAISSPersistence
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
+
 class CheaaChannelCrawler:
     """中国家电网频道爬虫"""
     
@@ -69,6 +76,15 @@ class CheaaChannelCrawler:
         
         self.persistence_manager = get_default_manager()
         
+        # 初始化FAISS向量数据库（如果可用）
+        self.faiss_db = None
+        if HAS_FAISS:
+            try:
+                self.faiss_db = FAISSPersistence()
+                print("FAISS向量数据库已初始化")
+            except Exception as e:
+                print(f"初始化FAISS向量数据库失败: {e}")
+
     def list_channels(self):
         """列出所有可用的频道"""
         print("可用频道列表:")
@@ -277,7 +293,8 @@ class CheaaChannelCrawler:
                 'article_count': 0
             }
             
-    def batch_crawl(self, channel_keys=None, module_keys=None, use_selenium=False, output_file=None):
+    def batch_crawl(self, channel_keys=None, module_keys=None, use_selenium=False, 
+                    output_file=None, use_vector_db=False):
         """批量爬取指定的频道和模块"""
         # 生成URL列表
         url_infos = self.generate_module_urls(channel_keys, module_keys)
@@ -295,7 +312,7 @@ class CheaaChannelCrawler:
             result = self.crawl_module(url_info, use_selenium)
             results.append(result)
         
-        # 保存结果
+        # 保存结果到JSON文件
         if output_file:
             self.persistence_manager.save_with_method('json', results, output_file)
         else:
@@ -307,6 +324,14 @@ class CheaaChannelCrawler:
         
         # 生成HTML报告
         self.persistence_manager.save_with_method('html_report', results)
+        
+        # 如果启用了向量数据库，并且FAISS可用，保存到向量数据库
+        if use_vector_db and self.faiss_db:
+            # 过滤出成功爬取的文档
+            success_docs = [r for r in results if 'error' not in r]
+            if success_docs:
+                print(f"将 {len(success_docs)} 个文档保存到向量数据库...")
+                self.faiss_db.save(success_docs)
         
         return results
         
@@ -413,6 +438,7 @@ def parse_args():
     crawl_parser.add_argument('--modules', '-m', nargs='+', help='模块标识列表')
     crawl_parser.add_argument('--use-selenium', '-s', action='store_true', help='使用Selenium进行爬取')
     crawl_parser.add_argument('--output', '-o', help='输出文件路径')
+    crawl_parser.add_argument('--use-vector-db', action='store_true', help='将结果保存到向量数据库')
     
     # get-article-urls 命令
     get_article_urls_parser = subparsers.add_parser('get-article-urls', help='只获取文章的URL和标题信息')
@@ -453,7 +479,8 @@ def main():
             
     elif args.command == 'crawl':
         # 执行爬取
-        crawler.batch_crawl(args.channels, args.modules, args.use_selenium, args.output)
+        crawler.batch_crawl(args.channels, args.modules, args.use_selenium, 
+                            args.output, args.use_vector_db)
         
     elif args.command == 'get-article-urls':
         # 只获取文章的URL和标题

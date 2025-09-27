@@ -10,6 +10,12 @@ import json
 import pandas as pd
 from abc import ABC, abstractmethod
 
+# 导入FAISS持久化（先尝试导入，如果失败则继续）
+try:
+    from src.storage.vector_db import FAISSPersistence
+    HAS_FAISS = True
+except ImportError:
+    HAS_FAISS = False
 
 class DataPersistence(ABC):
     """数据持久化抽象基类"""
@@ -351,6 +357,13 @@ def get_default_manager():
         # 注册默认的持久化方法
         _default_manager.register_persistence('json', JSONPersistence())
         _default_manager.register_persistence('html_report', HTMLReportPersistence())
+        
+        # 如果FAISS可用，注册FAISS持久化
+        if HAS_FAISS:
+            try:
+                _default_manager.register_persistence('faiss', FAISSPersistence())
+            except Exception as e:
+                print(f"注册FAISS持久化失败: {e}")
     
     return _default_manager
 
