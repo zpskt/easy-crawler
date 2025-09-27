@@ -84,8 +84,20 @@ class FAISSPersistence(DataPersistence):
             if len(text) > max_length:
                 text = text[:max_length]
             
-            # 生成嵌入
-            embedding = self.model.encode([text])[0]
+            # 确保文本不为空
+            if not text or not text.strip():
+                return np.zeros((1, 384), dtype=np.float32)
+            
+            # 直接生成嵌入，SentenceTransformer的encode方法可以处理单个字符串或字符串列表
+            # 注意：不同版本的sentence-transformers可能有不同的参数要求
+            try:
+                # 尝试直接传递文本字符串
+                embedding = self.model.encode(text, convert_to_tensor=False)
+            except TypeError:
+                # 如果报错，尝试传递文本列表
+                embedding = self.model.encode([text], convert_to_tensor=False)[0]
+            
+            # 确保返回格式正确
             return np.array([embedding], dtype=np.float32)
         except Exception as e:
             logger.error(f"生成嵌入时出错: {e}")
