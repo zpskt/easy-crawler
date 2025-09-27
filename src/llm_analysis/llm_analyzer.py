@@ -6,6 +6,8 @@ LLM文档分析器 - 用于分析爬取的文档并生成简要报告
 import json
 import os
 import logging
+import requests
+import time
 from typing import List, Dict, Optional
 
 # 设置日志
@@ -15,13 +17,314 @@ logger = logging.getLogger(__name__)
 class LLMAnalyzer:
     """LLM文档分析器类"""
     
-    def __init__(self):
-        """初始化分析器"""
-        # 这里可以初始化LLM API客户端
-        # 例如OpenAI、Anthropic、百度文心一言等
-        # 目前使用模拟分析，实际使用时需要替换为真实的LLM API调用
-        self.use_real_llm = False
+    def __init__(self, use_real_llm: bool = True, ollama_url: str = "http://localhost:11434/api/generate", model: str = "deepseek-r1:7b"):
+        """初始化分析器
         
+        Args:
+            use_real_llm: 是否使用真实的LLM模型
+            ollama_url: ollama API的URL地址
+            model: 使用的模型名称
+        """
+        # 这里初始化LLM API客户端
+        self.use_real_llm = use_real_llm
+        self.ollama_url = ollama_url
+        self.model = model
+        self.max_retries = 3
+        self.retry_delay = 5  # 增加重试间隔时间到5秒
+        self.timeout = 60  # 增加超时时间到60秒
+        
+        # 如果启用真实LLM，测试连接
+        if self.use_real_llm:
+            self._test_ollama_connection()
+    
+    def _test_ollama_connection(self):
+        """测试与ollama服务的连接"""
+        try:
+            logger.info(f"测试连接到ollama服务: {self.ollama_url}，使用模型: {self.model}")
+            # 发送一个简单的请求测试连接
+            response = requests.post(
+                self.ollama_url,
+                json={"model": self.model, "prompt": "hello", "stream": False},
+                timeout=self.timeout
+            )
+            if response.status_code == 200:
+                logger.info(f"成功连接到ollama服务，使用模型: {self.model}")
+                logger.info(f"响应示例: {response.json().get('response', '')[:30]}...")
+            else:
+                logger.warning(f"连接到ollama服务失败，状态码: {response.status_code}")
+                logger.warning(f"响应内容: {response.text}")
+        except requests.Timeout:
+            logger.warning(f"连接到ollama服务超时，请检查服务是否正常运行或增加超时时间")
+        except requests.ConnectionError:
+            logger.warning(f"无法连接到ollama服务，请确保服务正在运行，URL: {self.ollama_url}")
+        except Exception as e:
+            logger.warning(f"测试ollama连接时出错: {type(e).__name__}: {e}")
+            logger.info("请确保ollama服务正在运行，并且已经下载了指定的模型")
+    
+    def _call_llm_api(self, content: str) -> Dict:
+        """调用LLM API进行文档分析
+        
+        Args:
+            content: 文档内容
+            
+        Returns:
+            分析结果字典
+        """
+        # 构建提示词
+        prompt = f"""请分析以下文档内容，并按照要求生成分析结果：
+1. 生成2-3句话的摘要
+2. 提取5个关键词
+3. 列出2-3个关键点
+返回的数据格式为JSON，请返回JSON格式数据。
+摘要放在summary字段，关键词放在keywords字段，关键点放在key_points字段。
+文档内容：
+{content[:2000]}..."""
+        
+        logger.info(f"准备调用LLM API，内容长度: {len(content)}字符")
+        # 调用ollama API
+        for attempt in range(self.max_retries):
+            try:
+                logger.info(f"第{attempt+1}/{self.max_retries}次尝试调用LLM API...")
+                start_time = time.time()
+                response = requests.post(
+                    self.ollama_url,
+                    json={
+                        "model": self.model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.7,
+                            "max_tokens": 500
+                        }
+                    },
+                    timeout=self.timeout
+                )
+                end_time = time.time()
+                logger.info(f"API调用完成，耗时: {end_time - start_time:.2f}秒")
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.info(f"API调用成功，响应长度: {len(result.get('response', ''))}字符")
+                    return self._parse_llm_response(result.get("response", ""))
+                else:
+                    logger.error(f"LLM API调用失败，状态码: {response.status_code}")
+                    logger.error(f"响应内容: {response.text}")
+                    if attempt < self.max_retries - 1:
+                        logger.info(f"{self.retry_delay}秒后重试...")
+                        time.sleep(self.retry_delay)
+            except requests.Timeout:
+                logger.error(f"LLM API调用超时 (当前设置: {self.timeout}秒)")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"{self.retry_delay}秒后重试...")
+                    time.sleep(self.retry_delay)
+            except requests.ConnectionError:
+                logger.error(f"无法连接到ollama服务，请检查服务是否正在运行")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"{self.retry_delay}秒后重试...")
+                    time.sleep(self.retry_delay)
+            except Exception as e:
+                logger.error(f"LLM API调用异常: {type(e).__name__}: {e}")
+                if attempt < self.max_retries - 1:
+                    logger.info(f"{self.retry_delay}秒后重试...")
+                    time.sleep(self.retry_delay)
+        
+        # 如果所有重试都失败，返回空结果
+        logger.error(f"所有{self.max_retries}次LLM API调用尝试都失败了")
+        return {
+            "summary": "",
+            "keywords": [],
+            "key_points": []
+        }
+    
+    def _parse_llm_response(self, response):
+        """
+        解析LLM返回的响应，先过滤思考过程，再尝试JSON解析
+        :param response: LLM返回的响应文本
+        :return: 解析后的字典，包含summary、keywords和key_points
+        """
+        result = {
+            "summary": "",
+            "keywords": [],
+            "key_points": []
+        }
+        
+        try:
+            # 1. 首先过滤掉思考过程内容
+            clean_response = self._remove_thinking_process(response)
+            logger.debug(f"过滤思考过程后的响应: {clean_response}")
+            
+            # 2. 解码HTML实体（如 &quot; -> "）
+            import html
+            decoded_response = html.unescape(clean_response)
+            logger.debug(f"解码后的响应: {decoded_response}")
+            
+            # 3. 尝试直接解析JSON
+            import json
+            parsed_json = json.loads(decoded_response)
+            logger.debug(f"解析后的JSON: {parsed_json}")
+            
+            # 4. 提取所需字段
+            if isinstance(parsed_json, dict):
+                # 提取摘要
+                if "summary" in parsed_json and parsed_json["summary"]:
+                    result["summary"] = parsed_json["summary"]
+                    logger.debug(f"提取摘要: {result['summary']}")
+                
+                # 提取关键词
+                if "keywords" in parsed_json and isinstance(parsed_json["keywords"], list):
+                    result["keywords"] = parsed_json["keywords"][:5]  # 最多取5个
+                    logger.debug(f"提取关键词: {result['keywords']}")
+                
+                # 提取关键点
+                if "key_points" in parsed_json and isinstance(parsed_json["key_points"], list):
+                    result["key_points"] = parsed_json["key_points"][:5]  # 最多取5个
+                    logger.debug(f"提取关键点: {result['key_points']}")
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON解析错误，尝试使用备选解析方案: {e}")
+            # 5. 如果JSON解析失败，使用原来的解析方法
+            result = self._parse_text_response(clean_response)
+        except Exception as e:
+            logger.error(f"解析响应时发生错误: {e}")
+        
+        # 记录最终解析结果
+        logger.debug(f"最终解析结果: {result}")
+        return result
+    
+    def _remove_thinking_process(self, response):
+        """
+        移除LLM响应中的思考过程内容
+        """
+        # 移除思考过程标记
+        if '</think>' in response and '</think>' in response[response.find('</think>')+3:]:
+            # 找到第一个和最后一个思考过程标记
+            start = response.find('</think>') + 3
+            end = response.rfind('</think>')
+            # 保留标记外的内容
+            response = response[:response.find('</think>')] + response[end+3:]
+        
+        # 也处理其他可能的思考过程格式
+        if '思考过程' in response or 'thought' in response.lower():
+            # 这里可以根据实际情况添加更多的过滤逻辑
+            pass
+            
+        return response
+    
+    def _parse_text_response(self, response):
+        """
+        文本格式响应的解析方法（原有的解析逻辑）
+        """
+        result = {
+            "summary": "",
+            "keywords": [],
+            "key_points": []
+        }
+        
+        # 这里放入原来的文本解析代码
+        # 简单解析响应，根据常见的格式进行提取
+        lines = response.strip().split('\n')
+        
+        # 重置所有解析状态
+        parsing_summary = False
+        parsing_keywords = False
+        parsing_key_points = False
+        
+        # 遍历所有行，根据行内容判断当前应该解析的部分
+        for line in lines:
+            stripped_line = line.strip()
+            
+            # 如果是空行，跳过
+            if not stripped_line:
+                continue
+            
+            # 检查是否是部分标题行，使用更宽松的匹配
+            if ('摘要' in stripped_line or 'Summary' in stripped_line.lower()):
+                parsing_summary = True
+                parsing_keywords = False
+                parsing_key_points = False
+                # 如果标题后面直接跟内容，提取内容
+                if ':' in stripped_line:
+                    summary_content = stripped_line.split(':', 1)[1].strip()
+                    if summary_content:
+                        result["summary"] = summary_content
+                continue
+            elif ('关键词' in stripped_line or 'Keywords' in stripped_line.lower()):
+                parsing_summary = False
+                parsing_keywords = True
+                parsing_key_points = False
+                continue
+            elif ('关键点' in stripped_line or 'Key Points' in stripped_line.lower()):
+                parsing_summary = False
+                parsing_keywords = False
+                parsing_key_points = True
+                continue
+            
+            # 根据当前解析状态处理内容
+            if parsing_summary:
+                # 移除可能的引号和HTML实体
+                cleaned_line = stripped_line.replace('&quot;', '"').replace('&amp;', '&')
+                if result["summary"]:
+                    result["summary"] += ' ' + cleaned_line
+                else:
+                    result["summary"] = cleaned_line
+            elif parsing_keywords:
+                # 处理关键词行，可能包含序号
+                if stripped_line[0].isdigit() and (stripped_line[1] == '.' or stripped_line[1] == '、'):
+                    # 移除序号前缀（如1.、2.、3.等）
+                    keyword = stripped_line.split('.', 1)[1].strip() if '.' in stripped_line else \
+                              stripped_line.split('、', 1)[1].strip()
+                    if keyword and len(result["keywords"]) < 5:
+                        result["keywords"].append(keyword)
+                elif ':' in stripped_line:
+                    # 处理类似"关键词：关键词1，关键词2"的格式
+                    keywords_part = stripped_line.split(':', 1)[1].strip()
+                    # 分割关键词（处理逗号、顿号、分号等分隔符）
+                    for sep in [',', '，', ';', '；']:
+                        if sep in keywords_part:
+                            keywords = [kw.strip() for kw in keywords_part.split(sep)]
+                            for kw in keywords[:5 - len(result["keywords"])]:
+                                if kw:
+                                    result["keywords"].append(kw)
+                            break
+            elif parsing_key_points:
+                # 处理关键点行，可能包含序号
+                if stripped_line[0].isdigit() and (stripped_line[1] == '.' or stripped_line[1] == '、'):
+                    # 移除序号前缀（如1.、2.、3.等）
+                    key_point = stripped_line.split('.', 1)[1].strip() if '.' in stripped_line else \
+                               stripped_line.split('、', 1)[1].strip()
+                    # 移除可能的引号和HTML实体
+                    key_point = key_point.replace('&quot;', '"').replace('&amp;', '&')
+                    if key_point and len(result["key_points"]) < 3:
+                        result["key_points"].append(key_point)
+        
+        # 如果解析后仍然没有数据，尝试使用备选解析方案
+        if not result["summary"] and not result["keywords"] and not result["key_points"]:
+            # 尝试直接从响应中提取有用信息
+            for i, line in enumerate(lines):
+                stripped_line = line.strip().replace('&quot;', '"').replace('&amp;', '&')
+                if not stripped_line:
+                    continue
+                
+                # 如果是第一行且长度适中，可能是摘要
+                if i == 0 and 20 <= len(stripped_line) <= 200:
+                    result["summary"] = stripped_line
+                # 如果包含明显的关键词格式
+                elif ':' in stripped_line and ('关键词' in stripped_line or 'Keywords' in stripped_line.lower()):
+                    keywords_part = stripped_line.split(':', 1)[1].strip()
+                    for sep in [',', '，', ';', '；']:
+                        if sep in keywords_part:
+                            keywords = [kw.strip() for kw in keywords_part.split(sep)]
+                            result["keywords"] = keywords[:5]
+                            break
+                # 如果包含序号列表，可能是关键点
+                elif stripped_line[0].isdigit() and (stripped_line[1] == '.' or stripped_line[1] == '、') and len(stripped_line) > 10:
+                    key_point = stripped_line.split('.', 1)[1].strip() if '.' in stripped_line else \
+                               stripped_line.split('、', 1)[1].strip()
+                    if key_point and len(result["key_points"]) < 3:
+                        result["key_points"].append(key_point)
+        
+        return result
+
     def analyze_document(self, document: Dict) -> Dict:
         """分析单个文档并生成摘要
         
@@ -54,12 +357,13 @@ class LLMAnalyzer:
             analysis_result['summary'] = '文档内容为空'
             return analysis_result
         
-        # 模拟LLM分析结果（实际使用时替换为真实的API调用）
+        # 生成分析结果
         if self.use_real_llm:
-            # 这里应该调用实际的LLM API
-            # 例如：
-            # analysis_result = self._call_llm_api(content)
-            pass
+            # 调用实际的LLM API
+            llm_result = self._call_llm_api(content)
+            analysis_result['summary'] = llm_result.get('summary', '')
+            analysis_result['keywords'] = llm_result.get('keywords', [])
+            analysis_result['key_points'] = llm_result.get('key_points', [])
         else:
             # 模拟分析结果
             # 从内容提取前100个字符作为摘要
@@ -286,8 +590,10 @@ if __name__ == "__main__":
         input_file = sys.argv[1]
         output_file = sys.argv[2] if len(sys.argv) > 2 else 'analysis_results.json'
         report_file = sys.argv[3] if len(sys.argv) > 3 else 'analysis_report.html'
+        use_real_llm = True if '--use-real-llm' in sys.argv else True
+        model = sys.argv[sys.argv.index('--model') + 1] if '--model' in sys.argv else 'deepseek-r1:7b'
         
-        analyzer = LLMAnalyzer()
+        analyzer = LLMAnalyzer(use_real_llm=use_real_llm, model=model)
         
         # 加载文档
         documents = analyzer.load_documents_from_json(input_file)
@@ -306,4 +612,4 @@ if __name__ == "__main__":
         
         print(f"分析完成！结果已保存到 {output_file}，报告已保存到 {report_file}")
     else:
-        print("用法: python llm_analyzer.py <输入JSON文件> [输出结果文件] [HTML报告文件]")
+        print("用法: python llm_analyzer.py <输入JSON文件> [输出结果文件] [HTML报告文件] [--use-real-llm] [--model 模型名称]")
