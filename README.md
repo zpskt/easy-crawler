@@ -9,6 +9,8 @@
 - 可以提取标题、正文、图片、作者、日期等信息
 - 提供批量处理功能，支持CSV/Excel格式的URL列表
 - 网站特定配置，可针对不同网站进行优化
+- 灵活的数据持久化模块，支持多种存储方式
+- 中国家电网专用频道爬虫，支持多种频道和模块
 
 ## 环境安装
 
@@ -29,6 +31,7 @@ try:
     print(f"标题: {result['title']}")
     print(f"内容长度: {result['content_length']}字符")
     print(f"图片数量: {result['image_count']}")
+    print(f"发布时间: {result.get('publish_time', '未找到')}")
 except Exception as e:
     print(f"提取失败: {e}")
 finally:
@@ -46,6 +49,7 @@ try:
     print(f"标题: {result['title']}")
     print(f"内容长度: {result['content_length']}字符")
     print(f"图片数量: {result['image_count']}")
+    print(f"发布时间: {result.get('publish_time', '未找到')}")
 except Exception as e:
     print(f"提取失败: {e}")
 finally:
@@ -62,6 +66,7 @@ finally:
 - `source`: 使用的提取方法（trafilatura或readability）
 - `author`: 作者（如果可提取）
 - `date`: 发布日期（如果可提取）
+- `publish_time`: 精确的发布时间（格式：YYYY-MM-DD HH:MM，特别针对中国家电网优化）
 - `url`: 提取的网页URL
 - `extraction_time`: 提取时间
 - `content_length`: 内容长度（字符数）
@@ -103,6 +108,107 @@ SITE_CONFIGS = {
         'content_selectors': ['.content', '.article-content']
     }
 }
+```
+
+## 数据持久化模块
+
+`data_persistence.py`提供了灵活的数据持久化功能，支持多种存储方式：
+
+### 功能特点
+
+- 基于策略模式设计，易于扩展新的持久化方式
+- 支持JSON文件存储、HTML报告生成、API调用和数据库存储
+- 提供统一的接口进行数据保存
+- 单例模式的管理器，方便全局使用
+
+### 使用示例
+
+```python
+from data_persistence import get_default_manager
+
+# 获取持久化管理器实例（单例模式）
+manager = get_default_manager()
+
+# 保存数据为JSON文件
+manager.save_with_method('json', data, 'output.json')
+
+# 生成HTML报告
+manager.save_with_method('html_report', data)
+
+# 使用API保存数据（需要在配置中设置API地址）
+# manager.save_with_method('api', data)
+
+# 保存到数据库（需要在配置中设置数据库连接信息）
+# manager.save_with_method('database', data)
+```
+
+### 支持的持久化策略
+
+- **JSON文件**: 将数据保存为JSON格式文件
+- **HTML报告**: 生成可视化的HTML报告
+- **API调用**: 将数据通过HTTP请求发送到指定API
+- **数据库**: 将数据直接保存到数据库（预留接口，需自行实现具体数据库连接）
+
+## 中国家电网频道爬虫
+
+`channel_crawler.py`提供了专门针对中国家电网的频道和模块爬虫功能：
+
+### 功能特点
+
+- 支持多个频道的选择（冰箱、空调、电视影音、洗衣机等）
+- 支持每个频道下的多个模块爬取（新品速递、行业瞭望、品牌观察等）
+- 自动提取文章链接和标题
+- 支持提取文章的发布时间
+- 提供命令行接口，方便批量操作
+
+### 支持的频道和模块
+
+| 频道标识 | 频道名称 | 支持的模块 |
+|---------|---------|-----------|
+| icebox  | 冰箱频道 | xinpin(新品速递), hangqing(行业瞭望), pinpai(品牌观察), pingce(产品评测), xuangou(选购指南) |
+| ac      | 空调频道 | xinpin(新品速递), hangqing(行业瞭望), pinpai(品牌观察), pingce(产品评测), xuangou(选购指南) |
+| tv      | 电视影音 | xinpin(新品速递), hangqing(行业瞭望), pinpai(品牌观察), pingce(产品评测), xuangou(选购指南) |
+| washing | 洗衣机频道 | xinpin(新品速递), hangqing(行业瞭望), pinpai(品牌观察), pingce(产品评测), xuangou(选购指南) |
+
+### 使用示例
+
+```python
+from channel_crawler import CheaaChannelCrawler
+
+# 创建爬虫实例
+crawler = CheaaChannelCrawler()
+
+# 列出所有可用频道
+crawler.list_channels()
+
+# 列出指定频道的模块
+crawler.list_modules('icebox')
+
+# 批量爬取指定频道和模块
+results = crawler.batch_crawl(
+    channel_keys=['icebox', 'ac'],  # 冰箱和空调频道
+    module_keys=['xinpin'],  # 仅爬取新品速递模块
+    output_file='cheaa_crawl_result.json'
+)
+```
+
+### 命令行接口
+
+```bash
+# 列出所有频道
+python channel_crawler.py list-channels
+
+# 列出指定频道的模块
+python channel_crawler.py list-modules icebox
+
+# 生成指定频道和模块的URL
+python channel_crawler.py generate-urls --channels icebox ac --modules xinpin
+
+# 爬取指定频道和模块的内容
+python channel_crawler.py crawl --channels icebox ac --modules xinpin --output cheaa_crawl_result.json
+
+# 使用Selenium爬取
+python channel_crawler.py crawl --channels icebox ac --modules xinpin --use-selenium
 ```
 
 ## 项目结构

@@ -85,10 +85,10 @@ class UniversalWebExtractor:
         try:
             # 提取为JSON格式，包含更多信息
             result_json = trafilatura.extract(
-                html,
-                include_links=False,
-                include_images=True,
-                include_tables=False,
+                html, 
+                include_links=False, 
+                include_images=True, 
+                include_tables=False, 
                 output_format='json',
                 url=url
             )
@@ -159,6 +159,51 @@ class UniversalWebExtractor:
             logger.error(f"图片提取失败: {e}")
             return []
 
+    def extract_publish_time(self, html):
+        """从HTML中提取发布时间，特别针对中国家电网的页面结构"""
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 查找class为info的div元素
+            info_div = soup.find('div', class_='info')
+            if info_div:
+                # 提取div中的文本
+                text = info_div.get_text(strip=True)
+                
+                # 使用正则表达式匹配日期时间格式 (2025-09-21 06:05)
+                date_pattern = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}'
+                match = re.search(date_pattern, text)
+                if match:
+                    return match.group()
+            
+            # 如果没有找到class为info的div，尝试其他常见的发布时间位置
+            other_selectors = [
+                '.time',
+                '.pubtime',
+                '.release-time',
+                'span.time',
+                'meta[name="pubdate"]',
+                'meta[property="article:published_time"]'
+            ]
+            
+            for selector in other_selectors:
+                elements = soup.select(selector)
+                if elements:
+                    if selector.startswith('meta'):
+                        content = elements[0].get('content', '')
+                        if content:
+                            return content
+                    else:
+                        text = elements[0].get_text(strip=True)
+                        date_pattern = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}'
+                        match = re.search(date_pattern, text)
+                        if match:
+                            return match.group()
+        except Exception as e:
+            logger.error(f"提取发布时间失败: {e}")
+        
+        return ''
+
     def clean_content(self, text):
         """清理文本内容"""
         if not text:
@@ -197,6 +242,14 @@ class UniversalWebExtractor:
             result['extraction_time'] = time.strftime('%Y-%m-%d %H:%M:%S')
             result['content_length'] = len(result.get('content', ''))
             result['image_count'] = len(result.get('images', []))
+            
+            # 专门提取发布时间（优先使用我们自定义的提取方法）
+            publish_time = self.extract_publish_time(html)
+            if publish_time:
+                result['publish_time'] = publish_time
+            # 如果自定义提取方法没有找到，但trafilatura或readability找到了，就使用它们的结果
+            elif not result.get('date'):
+                result['date'] = result.get('date', '')
 
             logger.info(
                 f"提取成功: 标题长度{len(result['title'])}, 内容长度{result['content_length']}, 图片数{result['image_count']}")
@@ -239,6 +292,7 @@ def main():
                 print(f"内容预览: {result['content'][:200]}...")
                 print(f"图片数量: {result['image_count']}")
                 print(f"提取方法: {result['source']}")
+                print(f"发布时间: {result.get('publish_time', '未找到')}")
 
             # 保存详细结果到文件
             with open(f'extraction_result_{len(results)}.json', 'w', encoding='utf-8') as f:
