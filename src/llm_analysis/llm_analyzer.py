@@ -222,7 +222,7 @@ class LLMAnalyzer:
         
         # 这里放入原来的文本解析代码
         # 简单解析响应，根据常见的格式进行提取
-        lines = response.strip().split('\n')
+        lines = text.strip().split('\n')
         
         # 重置所有解析状态
         parsing_summary = False
