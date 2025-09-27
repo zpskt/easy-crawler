@@ -10,6 +10,7 @@ import argparse
 import json
 from src.core.crawler import UniversalWebExtractor
 from src.storage.data_persistence import get_default_manager
+from src.config.config import CHEAA_CHANNELS
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
@@ -26,53 +27,8 @@ class CheaaChannelCrawler:
     
     def __init__(self):
         """初始化爬虫"""
-        # 定义中国家电网的频道和模块
-        self.channel_modules = {
-            'icebox': {
-                'name': '冰箱频道',
-                'base_url': 'https://icebox.cheaa.com/',
-                'modules': {
-                    'xinpin': {'name': '新品速递', 'url': 'xinpin.shtml'},
-                    'hangqing': {'name': '行业瞭望', 'url': 'hangqing.shtml'},
-                    'pinpai': {'name': '品牌观察', 'url': 'pinpai.shtml'},
-                    'pingce': {'name': '产品评测', 'url': 'pingce.shtml'},
-                    'xuangou': {'name': '选购指南', 'url': 'xuangou.shtml'}
-                }
-            },
-            'ac': {
-                'name': '空调频道',
-                'base_url': 'https://ac.cheaa.com/',
-                'modules': {
-                    'xinpin': {'name': '新品速递', 'url': 'xinpin.shtml'},
-                    'hangqing': {'name': '行业瞭望', 'url': 'hangqing.shtml'},
-                    'pinpai': {'name': '品牌观察', 'url': 'pinpai.shtml'},
-                    'pingce': {'name': '产品评测', 'url': 'pingce.shtml'},
-                    'xuangou': {'name': '选购指南', 'url': 'xuangou.shtml'}
-                }
-            },
-            'tv': {
-                'name': '电视影音',
-                'base_url': 'https://digitalhome.cheaa.com/',
-                'modules': {
-                    'xinpin': {'name': '新品速递', 'url': 'xinpin.shtml'},
-                    'hangqing': {'name': '行业瞭望', 'url': 'hangqing.shtml'},
-                    'pinpai': {'name': '品牌观察', 'url': 'pinpai.shtml'},
-                    'pingce': {'name': '产品评测', 'url': 'pingce.shtml'},
-                    'xuangou': {'name': '选购指南', 'url': 'xuangou.shtml'}
-                }
-            },
-            'washing': {
-                'name': '洗衣机频道',
-                'base_url': 'https://washer.cheaa.com/',
-                'modules': {
-                    'xinpin': {'name': '新品速递', 'url': 'xinpin.shtml'},
-                    'hangqing': {'name': '行业瞭望', 'url': 'hangqing.shtml'},
-                    'pinpai': {'name': '品牌观察', 'url': 'pinpai.shtml'},
-                    'pingce': {'name': '产品评测', 'url': 'pingce.shtml'},
-                    'xuangou': {'name': '选购指南', 'url': 'xuangou.shtml'}
-                }
-            }
-        }
+        # 从配置文件导入中国家电网的频道和模块配置
+        self.channel_modules = CHEAA_CHANNELS
         
         self.persistence_manager = get_default_manager()
         
@@ -492,8 +448,9 @@ def main():
             print(f"文章URL和标题列表已保存到: {args.output}")
         
     else:
-        # 显示帮助信息
-        print("请指定命令，使用 --help 查看可用命令")
+        # 默认行为：爬取所有内容
+        print("未指定命令，默认爬取所有频道和模块的内容...")
+        crawler.batch_crawl(None, None, False, None, False)
 
 
 if __name__ == "__main__":
