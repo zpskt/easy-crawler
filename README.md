@@ -19,6 +19,41 @@
 pip install trafilatura readability-lxml requests beautifulsoup4 selenium webdriver-manager pandas tqdm
 ```
 
+## 更新方法
+
+### 从Git仓库更新代码
+
+如果您已经克隆了项目仓库，可以使用以下命令更新代码：
+
+```bash
+# 切换到项目目录
+cd /path/to/easy-crawler
+
+# 拉取最新代码
+git pull origin main
+```
+
+### 更新依赖包
+
+当项目依赖包有更新时，可以使用以下命令更新所有依赖：
+
+```bash
+# 更新所有已安装的包
+pip install -U trafilatura readability-lxml requests beautifulsoup4 selenium webdriver-manager pandas tqdm
+
+# 或者使用requirements.txt文件（如果项目提供了）
+# pip install -U -r requirements.txt
+```
+
+### 检查更新日志
+
+在更新代码后，建议查看项目的更新日志或提交历史，了解最近的功能变更和修复：
+
+```bash
+# 查看最近的提交历史
+git log --oneline -n 10
+```
+
 ## 基本使用
 
 ### 静态页面提取

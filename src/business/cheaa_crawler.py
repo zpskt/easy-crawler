@@ -309,6 +309,80 @@ class CheaaChannelCrawler:
         self.persistence_manager.save_with_method('html_report', results)
         
         return results
+        
+    def get_article_urls_and_titles(self, channel_keys=None, module_keys=None, use_selenium=False):
+        """只获取文章的URL和标题信息，不爬取完整内容
+        
+        Args:
+            channel_keys: 要爬取的频道列表
+            module_keys: 要爬取的模块列表
+            use_selenium: 是否使用Selenium
+            
+        Returns:
+            list: 包含所有文章URL和标题的列表
+        """
+        # 生成URL列表
+        url_infos = self.generate_module_urls(channel_keys, module_keys)
+        
+        if not url_infos:
+            print("没有找到有效的URL，爬取任务取消")
+            return []
+        
+        print(f"开始获取 {len(url_infos)} 个模块页面中的文章URL和标题...")
+        
+        # 开始获取文章URL和标题
+        all_articles = []
+        try:
+            extractor = UniversalWebExtractor(use_selenium=use_selenium)
+            
+            for url_info in tqdm(url_infos, desc="获取文章URL进度"):
+                print(f"正在处理: {url_info['channel_name']} - {url_info['module_name']} ({url_info['url']})")
+                
+                try:
+                    # 获取页面HTML
+                    if use_selenium:
+                        html = extractor.get_content_with_selenium(url_info['url'])
+                    else:
+                        html = extractor.get_content_with_requests(url_info['url'])
+                    
+                    # 提取文章列表链接
+                    article_links = self.extract_article_links(html, url_info['url'])
+                    
+                    # 添加频道和模块信息
+                    for article in article_links:
+                        article['channel'] = url_info['channel']
+                        article['channel_name'] = url_info['channel_name']
+                        article['module'] = url_info['module']
+                        article['module_name'] = url_info['module_name']
+                        
+                        # 尝试提取发布时间（可选）
+                        try:
+                            if use_selenium:
+                                article_html = extractor.get_content_with_selenium(article['url'])
+                            else:
+                                article_html = extractor.get_content_with_requests(article['url'])
+                            publish_time = self.extract_publish_time(article_html)
+                            if publish_time:
+                                article['publish_time'] = publish_time
+                        except Exception as e:
+                            article['publish_time'] = None
+                            print(f"提取文章 {article['url']} 发布时间时出错: {e}")
+                        
+                        all_articles.append(article)
+                    
+                    print(f"  成功获取 {len(article_links)} 篇文章")
+                    
+                except Exception as e:
+                    print(f"处理模块 {url_info['url']} 时出错: {e}")
+            
+        finally:
+            # 确保关闭提取器
+            if 'extractor' in locals():
+                extractor.close()
+        
+        print(f"总共获取到 {len(all_articles)} 篇文章的URL和标题")
+        
+        return all_articles
 
 
 # 命令行接口
@@ -339,6 +413,13 @@ def parse_args():
     crawl_parser.add_argument('--modules', '-m', nargs='+', help='模块标识列表')
     crawl_parser.add_argument('--use-selenium', '-s', action='store_true', help='使用Selenium进行爬取')
     crawl_parser.add_argument('--output', '-o', help='输出文件路径')
+    
+    # get-article-urls 命令
+    get_article_urls_parser = subparsers.add_parser('get-article-urls', help='只获取文章的URL和标题信息')
+    get_article_urls_parser.add_argument('--channels', '-c', nargs='+', help='频道标识列表')
+    get_article_urls_parser.add_argument('--modules', '-m', nargs='+', help='模块标识列表')
+    get_article_urls_parser.add_argument('--use-selenium', '-s', action='store_true', help='使用Selenium进行爬取')
+    get_article_urls_parser.add_argument('--output', '-o', help='输出文件路径')
     
     return parser.parse_args()
 
@@ -373,6 +454,15 @@ def main():
     elif args.command == 'crawl':
         # 执行爬取
         crawler.batch_crawl(args.channels, args.modules, args.use_selenium, args.output)
+        
+    elif args.command == 'get-article-urls':
+        # 只获取文章的URL和标题
+        articles = crawler.get_article_urls_and_titles(args.channels, args.modules, args.use_selenium)
+        
+        if args.output:
+            with open(args.output, 'w', encoding='utf-8') as f:
+                json.dump(articles, f, ensure_ascii=False, indent=2)
+            print(f"文章URL和标题列表已保存到: {args.output}")
         
     else:
         # 显示帮助信息
