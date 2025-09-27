@@ -140,7 +140,8 @@ easy-crawler/
 ├── src/                    # 源代码目录
 │   ├── business/           # 业务逻辑
 │   ├── storage/            # 存储模块（向量数据库）
-│   └── utils/              # 工具函数
+│   ├── utils/              # 工具函数
+│   └── llm_analysis/       # LLM分析模块
 ├── scripts/                # 实用脚本
 ├── web/                    # 前端界面
 ├── api_server.py           # API服务器

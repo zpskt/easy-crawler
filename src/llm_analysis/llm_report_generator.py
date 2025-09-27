@@ -8,7 +8,7 @@ import os
 import logging
 import datetime
 from typing import List, Dict
-from llm_analyzer import LLMAnalyzer
+from src.llm_analysis.llm_analyzer import LLMAnalyzer
 
 # 设置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
