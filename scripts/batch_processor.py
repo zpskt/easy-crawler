@@ -6,9 +6,9 @@
 # @Software: PyCharm
 # batch_processor.py
 import pandas as pd
-from crawler import UniversalWebExtractor
+from src.core.crawler import UniversalWebExtractor
 from tqdm import tqdm
-from data_persistence import get_default_manager, JSONPersistence, HTMLReportPersistence, PersistenceManager, APIPersistence, DatabasePersistence
+from src.storage.data_persistence import get_default_manager
 
 
 class BatchProcessor:
@@ -63,7 +63,7 @@ def batch_process_urls(urls_file, output_file, use_selenium=False):
 # 使用示例
 if __name__ == "__main__":
     # 基本用法
-    batch_process_urls('urls.csv', 'extraction_results.json', use_selenium=False)
+    batch_process_urls('../src/config/urls.csv', 'extraction_results.json', use_selenium=False)
     
     # 高级用法 - 使用BatchProcessor类
     """

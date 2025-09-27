@@ -11,6 +11,7 @@
 - 网站特定配置，可针对不同网站进行优化
 - 灵活的数据持久化模块，支持多种存储方式
 - 中国家电网专用频道爬虫，支持多种频道和模块
+- LLM文档分析功能，可自动分析爬取的文档并生成简要报告
 
 ## 环境安装
 
@@ -23,37 +24,37 @@ pip install trafilatura readability-lxml requests beautifulsoup4 selenium webdri
 ### 静态页面提取
 
 ```python
-from crawler import UniversalWebExtractor
+from src.core.crawler import UniversalWebExtractor
 
 extractor = UniversalWebExtractor(use_selenium=False)  # 静态页面
 try:
-    result = extractor.smart_extract("http://example.com")
-    print(f"标题: {result['title']}")
-    print(f"内容长度: {result['content_length']}字符")
-    print(f"图片数量: {result['image_count']}")
-    print(f"发布时间: {result.get('publish_time', '未找到')}")
+  result = extractor.smart_extract("http://example.com")
+  print(f"标题: {result['title']}")
+  print(f"内容长度: {result['content_length']}字符")
+  print(f"图片数量: {result['image_count']}")
+  print(f"发布时间: {result.get('publish_time', '未找到')}")
 except Exception as e:
-    print(f"提取失败: {e}")
+  print(f"提取失败: {e}")
 finally:
-    extractor.close()  # 关闭资源
+  extractor.close()  # 关闭资源
 ```
 
 ### 动态页面提取
 
 ```python
-from crawler import UniversalWebExtractor
+from src.core.crawler import UniversalWebExtractor
 
 extractor = UniversalWebExtractor(use_selenium=True)  # 动态页面如微博
 try:
-    result = extractor.smart_extract("https://weibo.com/xxx")
-    print(f"标题: {result['title']}")
-    print(f"内容长度: {result['content_length']}字符")
-    print(f"图片数量: {result['image_count']}")
-    print(f"发布时间: {result.get('publish_time', '未找到')}")
+  result = extractor.smart_extract("https://weibo.com/xxx")
+  print(f"标题: {result['title']}")
+  print(f"内容长度: {result['content_length']}字符")
+  print(f"图片数量: {result['image_count']}")
+  print(f"发布时间: {result.get('publish_time', '未找到')}")
 except Exception as e:
-    print(f"提取失败: {e}")
+  print(f"提取失败: {e}")
 finally:
-    extractor.close()  # 关闭资源
+  extractor.close()  # 关闭资源
 ```
 
 ## 提取结果字段说明
@@ -75,25 +76,25 @@ finally:
 
 ## 批量处理
 
-使用`batch_processor.py`可以批量处理URL列表：
+使用`scripts/batch_processor.py`可以批量处理URL列表：
 
 ```python
-from batch_processor import batch_process_urls
+from scripts.batch_processor import batch_process_urls
 
 # 批量处理URL列表
 # 支持CSV或Excel文件，文件中需包含名为'url'的列
-batch_process_urls('urls.csv', 'extraction_results.json', use_selenium=False)
+batch_process_urls('src/config/urls.csv', 'extraction_results.json', use_selenium=False)
 ```
 
 也可以直接运行脚本：
 
 ```bash
-python batch_processor.py
+python scripts/batch_processor.py
 ```
 
 ## 网站特定配置
 
-在`config.py`文件中，可以配置针对特定网站的提取参数：
+在`src/config/config.py`文件中，可以配置针对特定网站的提取参数：
 
 ```python
 # 示例配置
@@ -112,7 +113,7 @@ SITE_CONFIGS = {
 
 ## 数据持久化模块
 
-`data_persistence.py`提供了灵活的数据持久化功能，支持多种存储方式：
+`src/storage/data_persistence.py`提供了灵活的数据持久化功能，支持多种存储方式：
 
 ### 功能特点
 
@@ -124,7 +125,7 @@ SITE_CONFIGS = {
 ### 使用示例
 
 ```python
-from data_persistence import get_default_manager
+from src.storage.data_persistence import get_default_manager
 
 # 获取持久化管理器实例（单例模式）
 manager = get_default_manager()
@@ -151,7 +152,7 @@ manager.save_with_method('html_report', data)
 
 ## 中国家电网频道爬虫
 
-`channel_crawler.py`提供了专门针对中国家电网的频道和模块爬虫功能：
+`src/business/cheaa_crawler.py`提供了专门针对中国家电网的频道和模块爬虫功能：
 
 ### 功能特点
 
@@ -173,7 +174,7 @@ manager.save_with_method('html_report', data)
 ### 使用示例
 
 ```python
-from channel_crawler import CheaaChannelCrawler
+from src.business.cheaa_crawler import CheaaChannelCrawler
 
 # 创建爬虫实例
 crawler = CheaaChannelCrawler()
@@ -186,9 +187,9 @@ crawler.list_modules('icebox')
 
 # 批量爬取指定频道和模块
 results = crawler.batch_crawl(
-    channel_keys=['icebox', 'ac'],  # 冰箱和空调频道
-    module_keys=['xinpin'],  # 仅爬取新品速递模块
-    output_file='cheaa_crawl_result.json'
+  channel_keys=['icebox', 'ac'],  # 冰箱和空调频道
+  module_keys=['xinpin'],  # 仅爬取新品速递模块
+  output_file='cheaa_crawl_result.json'
 )
 ```
 
@@ -196,19 +197,19 @@ results = crawler.batch_crawl(
 
 ```bash
 # 列出所有频道
-python channel_crawler.py list-channels
+python -m src.business.cheaa_crawler list-channels
 
 # 列出指定频道的模块
-python channel_crawler.py list-modules icebox
+python -m src.business.cheaa_crawler list-modules icebox
 
 # 生成指定频道和模块的URL
-python channel_crawler.py generate-urls --channels icebox ac --modules xinpin
+python -m src.business.cheaa_crawler generate-urls --channels icebox ac --modules xinpin
 
 # 爬取指定频道和模块的内容
-python channel_crawler.py crawl --channels icebox ac --modules xinpin --output cheaa_crawl_result.json
+python -m src.business.cheaa_crawler crawl --channels icebox ac --modules xinpin --output cheaa_crawl_result.json
 
 # 使用Selenium爬取
-python channel_crawler.py crawl --channels icebox ac --modules xinpin --use-selenium
+python -m src.business.cheaa_crawler crawl --channels icebox ac --modules xinpin --use-selenium
 ```
 
 ## 项目结构
@@ -263,3 +264,100 @@ easy-crawler/
 ### 3. 如何处理大量URL？
 
 使用批量处理功能，参考批量处理部分的说明
+
+## LLM文档分析功能
+
+easy-crawler现在提供了强大的LLM文档分析功能，可以自动分析爬取的文档内容并生成简要报告。
+
+### 功能特点
+
+- 自动分析文档内容，提取摘要、关键词和关键点
+- 支持批量分析多个文档
+- 生成直观的HTML分析报告
+- 可扩展支持真实的LLM API调用（如OpenAI、百度文心一言等）
+
+### 使用方法
+
+使用提供的命令行脚本可以快速分析爬取的文档：
+
+```bash
+# 分析单个文档文件
+python analyze_documents.py extraction_results.json
+
+# 分析多个文档文件
+python analyze_documents.py file1.json file2.json file3.json
+
+# 指定输出目录
+python analyze_documents.py extraction_results.json --output-dir my_reports
+
+# 只生成HTML报告（不生成JSON结果）
+python analyze_documents.py extraction_results.json --no-json
+
+# 只生成JSON结果（不生成HTML报告）
+python analyze_documents.py extraction_results.json --no-html
+```
+
+### 分析结果包含
+
+- 文档标题和URL
+- 发布时间（如果有）
+- 内容摘要
+- 关键词提取
+- 关键点总结
+
+### 直接使用API
+
+```python
+from llm_analyzer import LLMAnalyzer
+
+# 创建分析器实例
+analyzer = LLMAnalyzer()
+
+# 加载文档
+# 可以是单个文档字典，也可以是文档列表
+# documents = [{'title': '文档标题', 'content': '文档内容', ...}]
+documents = analyzer.load_documents_from_json('extraction_results.json')
+
+# 分析文档
+results = analyzer.batch_analyze(documents)
+
+# 保存分析结果
+analyzer.save_analysis_results(results, 'analysis_results.json')
+
+# 生成HTML报告
+analyzer.generate_analysis_report(results, 'analysis_report.html')
+```
+
+### 集成真实LLM API
+
+目前的实现使用模拟分析结果。要集成真实的LLM API，请修改`LLMAnalyzer`类中的`use_real_llm`属性为`True`，并实现`_call_llm_api`方法：
+
+```python
+# 在llm_analyzer.py中添加
+class LLMAnalyzer:
+    def __init__(self):
+        self.use_real_llm = True  # 设置为True使用真实LLM API
+        # 初始化LLM API客户端
+        # 例如OpenAI API
+        # import openai
+        # openai.api_key = 'your-api-key'
+    
+    def _call_llm_api(self, content):
+        """调用实际的LLM API进行分析"""
+        # 实现实际的API调用
+        # 例如：
+        # response = openai.ChatCompletion.create(
+        #     model="gpt-3.5-turbo",
+        #     messages=[
+        #         {"role": "system", "content": "你是一个文档分析助手，..."},
+        #         {"role": "user", "content": f"分析以下文档内容：{content[:2000]}"}
+        #     ]
+        # )
+        # # 解析API响应并返回分析结果
+        # return self._parse_llm_response(response)
+        pass
+```
+
+## 代码分层结构
+
+为了提高代码的可维护性和可扩展性，我们建议按照以下分层结构组织代码：

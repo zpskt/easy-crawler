@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 # @Time    : 2025/10/1 10:00
 # @Author  : zhangpeng /zpskt
-# @File    : channel_crawler.py
+# @File    : cheaa_crawler.py
 # @Software: PyCharm
 # 中国家电网频道和模块爬虫 - 灵活选择目标爬取模块网址
 
 import argparse
 import json
-from crawler import UniversalWebExtractor
-from data_persistence import get_default_manager
+from src.core.crawler import UniversalWebExtractor
+from src.storage.data_persistence import get_default_manager
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
