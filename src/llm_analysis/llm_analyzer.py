@@ -72,13 +72,13 @@ class LLMAnalyzer:
         """
         # 构建提示词
         prompt = f"""请分析以下文档内容，并按照要求生成分析结果：
-1. 生成2-3句话的摘要
-2. 提取5个关键词
-3. 列出2-3个关键点
-返回的数据格式为JSON，请返回JSON格式数据。
-摘要放在summary字段，关键词放在keywords字段，关键点放在key_points字段。
-文档内容：
-{content[:2000]}..."""
+                1. 生成2-4句话的摘要
+                2. 提取3个关键词
+                3. 列出3-5个关键点
+                返回的数据格式为JSON，请返回JSON格式数据。
+                摘要放在summary字段，关键词放在keywords字段，关键点放在key_points字段。
+                文档内容：
+                {content[:2000]}..."""
         
         logger.info(f"准备调用LLM API，内容长度: {len(content)}字符")
         # 调用ollama API
@@ -136,84 +136,84 @@ class LLMAnalyzer:
             "key_points": []
         }
     
-    def _parse_llm_response(self, response):
-        """
-        解析LLM返回的响应，先过滤思考过程，再尝试JSON解析
-        :param response: LLM返回的响应文本
-        :return: 解析后的字典，包含summary、keywords和key_points
-        """
-        result = {
-            "summary": "",
-            "keywords": [],
-            "key_points": []
-        }
-        
-        try:
-            # 1. 首先过滤掉思考过程内容
-            clean_response = self._remove_thinking_process(response)
-            logger.debug(f"过滤思考过程后的响应: {clean_response}")
-            
-            # 2. 解码HTML实体（如 &quot; -> "）
-            import html
-            decoded_response = html.unescape(clean_response)
-            logger.debug(f"解码后的响应: {decoded_response}")
-            
-            # 3. 尝试直接解析JSON
-            import json
-            parsed_json = json.loads(decoded_response)
-            logger.debug(f"解析后的JSON: {parsed_json}")
-            
-            # 4. 提取所需字段
-            if isinstance(parsed_json, dict):
-                # 提取摘要
-                if "summary" in parsed_json and parsed_json["summary"]:
-                    result["summary"] = parsed_json["summary"]
-                    logger.debug(f"提取摘要: {result['summary']}")
-                
-                # 提取关键词
-                if "keywords" in parsed_json and isinstance(parsed_json["keywords"], list):
-                    result["keywords"] = parsed_json["keywords"][:5]  # 最多取5个
-                    logger.debug(f"提取关键词: {result['keywords']}")
-                
-                # 提取关键点
-                if "key_points" in parsed_json and isinstance(parsed_json["key_points"], list):
-                    result["key_points"] = parsed_json["key_points"][:5]  # 最多取5个
-                    logger.debug(f"提取关键点: {result['key_points']}")
-            
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON解析错误，尝试使用备选解析方案: {e}")
-            # 5. 如果JSON解析失败，使用原来的解析方法
-            result = self._parse_text_response(clean_response)
-        except Exception as e:
-            logger.error(f"解析响应时发生错误: {e}")
-        
-        # 记录最终解析结果
-        logger.debug(f"最终解析结果: {result}")
-        return result
-    
     def _remove_thinking_process(self, response):
         """
         移除LLM响应中的思考过程内容
         """
-        # 移除思考过程标记
-        if '</think>' in response and '</think>' in response[response.find('</think>')+3:]:
+        # 移除思考过程标记（<think>...</think>格式）
+        if '<think>' in response and '</think>' in response:
             # 找到第一个和最后一个思考过程标记
+            start = response.find('<think>') + len('<think>')
+            end = response.find('</think>')
+            # 保留标记外的内容
+            response = response[:response.find('<think>')] + response[end + len('</think>'):]
+        
+        # 同时保留对旧格式的支持（以防万一）
+        if '</think>' in response and '</think>' in response[response.find('</think>')+3:]:
             start = response.find('</think>') + 3
             end = response.rfind('</think>')
-            # 保留标记外的内容
             response = response[:response.find('</think>')] + response[end+3:]
         
-        # 也处理其他可能的思考过程格式
+        # 处理其他可能的思考过程格式
         if '思考过程' in response or 'thought' in response.lower():
-            # 这里可以根据实际情况添加更多的过滤逻辑
+            # 可以添加更多过滤逻辑
             pass
             
-        return response
-    
-    def _parse_text_response(self, response):
-        """
-        文本格式响应的解析方法（原有的解析逻辑）
-        """
+        return response.strip()
+
+    def _parse_llm_response(self, response):
+        """解析LLM的响应，提取摘要、关键词和关键点"""
+        try:
+            # 第一步：移除思考过程
+            clean_response = self._remove_thinking_process(response)
+            logger.debug(f"过滤思考过程后的响应: {clean_response}")
+            
+            # 第二步：移除Markdown代码块标记
+            if clean_response.startswith('```json') and '```' in clean_response:
+                # 找到开始和结束的代码块标记
+                start_marker = '```json'
+                end_marker = '```'
+                start_index = clean_response.find(start_marker) + len(start_marker)
+                end_index = clean_response.rfind(end_marker)
+                # 提取中间的JSON内容
+                json_content = clean_response[start_index:end_index].strip()
+                logger.debug(f"移除代码块标记后的JSON内容: {json_content}")
+            else:
+                json_content = clean_response
+            
+            # 第三步：尝试直接解析JSON
+            try:
+                result = json.loads(json_content)
+                logger.debug(f"成功解析JSON响应: {result}")
+                
+                # 验证必要的字段是否存在
+                if all(key in result for key in ['summary', 'keywords', 'key_points']):
+                    return {
+                        'summary': result['summary'],
+                        'keywords': result['keywords'],
+                        'key_points': result['key_points']
+                    }
+                else:
+                    logger.warning("JSON格式不完整，缺少必要字段")
+                    # 如果JSON格式不完整，回退到文本解析
+                    return self._parse_text_response(json_content)
+                
+            except json.JSONDecodeError:
+                logger.warning(f"JSON解析失败，回退到文本解析: {json_content}")
+                # JSON解析失败，回退到文本解析
+                return self._parse_text_response(json_content)
+                
+        except Exception as e:
+            logger.error(f"解析响应时发生错误: {str(e)}")
+            return {
+                'summary': "",
+                'keywords': [],
+                'key_points': []
+            }
+
+    def _parse_text_response(self, text):
+        """当JSON解析失败时，使用文本解析作为备选方案"""
+        # 这里保留原有的文本解析逻辑
         result = {
             "summary": "",
             "keywords": [],
