@@ -95,7 +95,9 @@ class UniversalWebExtractor:
 
             if result_json:
                 data = json.loads(result_json)
-                return {
+                
+                # 创建结果字典
+                result = {
                     'title': data.get('title', ''),
                     'content': data.get('text', ''),
                     'images': self.extract_images_from_html(html, url),
@@ -104,6 +106,19 @@ class UniversalWebExtractor:
                     'author': data.get('author', ''),
                     'date': data.get('date', '')
                 }
+                
+                # 如果trafilatura没有提取到标题，尝试直接从HTML中提取
+                if not result['title']:
+                    try:
+                        soup = BeautifulSoup(html, 'html.parser')
+                        title_tag = soup.find('title')
+                        if title_tag and title_tag.text:
+                            result['title'] = title_tag.text.strip()
+                            logger.info(f"成功从HTML中提取标题: {result['title'][:30]}...")
+                    except Exception as e:
+                        logger.warning(f"从HTML中提取标题失败: {e}")
+                
+                return result
         except Exception as e:
             logger.warning(f"Trafilatura提取失败: {e}")
 

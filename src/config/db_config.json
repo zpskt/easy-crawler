@@ -1,0 +1,12 @@
+{
+  "mysql": {
+    "host": "localhost",
+    "user": "root",
+    "password": "your_password_here",
+    "database": "cheaa"
+  },
+  "api": {
+    "url": "",
+    "api_key": ""
+  }
+}

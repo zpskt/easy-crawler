@@ -283,32 +283,171 @@ class APIPersistence(DataPersistence):
 
 
 class DatabasePersistence(DataPersistence):
-    """数据库持久化实现（示例框架）"""
+    """MySQL数据库持久化实现"""
     
-    def __init__(self, connection_string):
-        """初始化数据库持久化器"""
-        self.connection_string = connection_string
-        # 这里可以初始化数据库连接
+    def __init__(self, db_config=None):
+        """初始化数据库持久化类
         
+        Args:
+            db_config: 数据库配置信息
+        """
+        self.db_config = db_config or {
+            'host': 'localhost',
+            'user': 'root',
+            'password': '',
+            'database': 'cheaa'
+        }
+        self.connection = None
+        self._connect()
+        
+    def _connect(self):
+        """建立数据库连接"""
+        try:
+            import pymysql
+            self.connection = pymysql.connect(
+                host=self.db_config.get('host', 'localhost'),
+                user=self.db_config.get('user'),
+                password=self.db_config.get('password'),
+                database=self.db_config.get('database'),
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            print(f"成功连接到MySQL数据库: {self.db_config.get('database')}")
+            
+            # 确保表存在
+            self._ensure_tables_exist()
+        except Exception as e:
+            print(f"连接MySQL数据库失败: {e}")
+            self.connection = None
+    
+    def _ensure_tables_exist(self):
+        """确保必要的表存在"""
+        if not self.connection:
+            return
+        
+        try:
+            with self.connection.cursor() as cursor:
+                # 创建文章表
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS articles (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    url VARCHAR(512) NOT NULL UNIQUE,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT,
+                    publish_time DATETIME,
+                    channel VARCHAR(100),
+                    channel_name VARCHAR(100),
+                    module VARCHAR(100),
+                    module_name VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_channel (channel),
+                    INDEX idx_module (module),
+                    INDEX idx_publish_time (publish_time)
+                )
+                ''')
+                
+                # 创建分析结果表
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS article_analyses (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    article_id INT NOT NULL,
+                    summary TEXT,
+                    keywords JSON,
+                    key_points JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+                    UNIQUE INDEX idx_article_id (article_id)
+                )
+                ''')
+                
+                # 创建每日汇总表
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS daily_summaries (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    date DATE NOT NULL UNIQUE,
+                    total_articles INT NOT NULL,
+                    new_articles INT NOT NULL,
+                    summary_file VARCHAR(255),
+                    analysis_file VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+                ''')
+            self.connection.commit()
+            print("确保表存在完成")
+        except Exception as e:
+            print(f"创建表失败: {e}")
+            if self.connection:
+                self.connection.rollback()
+    
     def save(self, data, output_path=None):
-        """直接保存数据到数据库"""
-        # 注意：这是一个示例框架，实际使用时需要根据数据库类型和结构实现
-        print(f"准备保存数据到数据库: {self.connection_string}")
-        print(f"数据量: {len(data)}条")
+        """保存数据到数据库
         
-        # 这里应该实现实际的数据库操作逻辑
-        # 例如：
-        # import pymysql
-        # conn = pymysql.connect(self.connection_string)
-        # cursor = conn.cursor()
-        # for item in data:
-        #     cursor.execute("INSERT INTO ... VALUES (%s, %s, ...)", (item['field1'], item['field2'], ...))
-        # conn.commit()
-        # cursor.close()
-        # conn.close()
+        Args:
+            data: 要保存的数据
+            output_path: 输出路径（在数据库持久化中可能不需要）
         
-        print("数据库保存操作已完成（示例）")
-        return "database_saved"
+        Returns:
+            str: 保存结果信息
+        """
+        if not self.connection:
+            self._connect()
+            if not self.connection:
+                return "数据库连接失败，无法保存数据"
+        
+        if not data:
+            return "没有数据需要保存"
+        
+        # 确保数据是列表格式
+        if not isinstance(data, list):
+            data = [data]
+        
+        saved_count = 0
+        try:
+            with self.connection.cursor() as cursor:
+                for item in data:
+                    # 跳过有错误的数据
+                    if 'error' in item:
+                        continue
+                    
+                    # 保存文章基本信息
+                    cursor.execute(
+                        """
+                        INSERT INTO articles (url, title, content, publish_time, channel, channel_name, module, module_name)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            title = VALUES(title),
+                            content = VALUES(content),
+                            publish_time = VALUES(publish_time),
+                            updated_at = CURRENT_TIMESTAMP
+                        """,
+                        (
+                            item.get('url', ''),
+                            item.get('title', ''),
+                            item.get('content', ''),
+                            item.get('publish_time'),
+                            item.get('channel', ''),
+                            item.get('channel_name', ''),
+                            item.get('module', ''),
+                            item.get('module_name', '')
+                        )
+                    )
+                    saved_count += 1
+            
+            self.connection.commit()
+            return f"成功保存 {saved_count} 条数据到数据库"
+        except Exception as e:
+            print(f"保存数据到数据库失败: {e}")
+            if self.connection:
+                self.connection.rollback()
+            return f"保存失败: {str(e)}"
+        finally:
+            pass
+            # 可选：关闭连接
+            # if self.connection:
+            #     self.connection.close()
 
 
 class PersistenceManager:

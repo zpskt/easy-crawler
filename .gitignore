@@ -61,6 +61,14 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Configuration files with sensitive information
+src/config/db_config.json
+*.secrets.json
+.env
+.env.local
+.env.production
+.env.development
+
 # Flask stuff:
 instance/
 .webassets-cache
