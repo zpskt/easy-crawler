@@ -34,3 +34,9 @@ OUTPUT_PATHS = {
     'daily_reports': '/Users/zhangpeng/Desktop/zpskt/easy-crawler/daily_reports',
     'outdir': '/Users/zhangpeng/Desktop/zpskt/easy-crawler/outdir'
 }
+
+# LLM配置
+LLM_CONFIG = {
+    'ollama_url': 'http://localhost:11434/api/generate',
+    'model': 'deepseek-r1:7b'
+}

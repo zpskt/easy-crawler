@@ -16,7 +16,7 @@ from datetime import datetime
 import requests
 from tqdm import tqdm
 
-from scripts.config import CRAWLER_PAGE_CONFIG, API_CONFIG, OUTPUT_PATHS
+from scripts.config import CRAWLER_PAGE_CONFIG, API_CONFIG, OUTPUT_PATHS, LLM_CONFIG
 
 # 将项目根目录添加到Python路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -240,7 +240,8 @@ def analyze_articles(articles):
     # 初始化LLM分析器
     llm_analyzer = LLMAnalyzer(
         use_real_llm=True,
-        model="deepseek-r1:7b"
+        ollama_url=LLM_CONFIG.get('ollama_url', 'http://localhost:11434/api/generate'),
+        model=LLM_CONFIG.get('model', 'deepseek-r1:7b')
     )
     
     # 批量分析文章
@@ -312,7 +313,8 @@ def generate_daily_files(articles, analyses, output_dir=None):
         # 生成HTML分析报告
         llm_analyzer = LLMAnalyzer(
             use_real_llm=True,
-            model="deepseek-r1:7b"
+            ollama_url=LLM_CONFIG.get('ollama_url', 'http://localhost:11434/api/generate'),
+            model=LLM_CONFIG.get('model', 'deepseek-r1:7b')
         )
         llm_analyzer.generate_analysis_report(analyses, analysis_html_file)
     
@@ -441,6 +443,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # 示例用法：
-    # python scripts/daily_crawler_analyzer.py --channels icebox --modules xinpin --api-url https://api.example.com/data --api-key your_api_key
-    # python scripts/daily_crawler_analyzer.py --channels icebox ac --modules xinpin hangqing --api-url https://api.example.com/data --api-key your_api_key --api-timeout 60 --api-retry-count 5
