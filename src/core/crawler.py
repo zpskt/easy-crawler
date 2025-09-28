@@ -100,7 +100,7 @@ class UniversalWebExtractor:
                 result = {
                     'title': data.get('title', ''),
                     'content': data.get('text', ''),
-                    'images': self.extract_images_from_html(html, url),
+                    'images': self.extract_images_from_content(html, url),
                     'source': 'trafilatura',
                     'excerpt': data.get('excerpt', ''),
                     'author': data.get('author', ''),
@@ -138,7 +138,7 @@ class UniversalWebExtractor:
             return {
                 'title': title,
                 'content': content_text,
-                'images': self.extract_images_from_html(html, url),
+                'images': self.extract_images_from_content(html, url),
                 'source': 'readability',
                 'excerpt': '',
                 'author': '',
@@ -172,6 +172,61 @@ class UniversalWebExtractor:
             return images
         except Exception as e:
             logger.error(f"图片提取失败: {e}")
+            return []
+
+    def extract_images_from_content(self, html, base_url):
+        """从HTML正文内容中提取图片"""
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            images = []
+            
+            # 首先尝试获取正文区域，如果无法确定正文区域，则提取所有图片
+            content_area = None
+            
+            # 尝试多种方式定位正文区域
+            # 1. 查找包含文章内容的主要div
+            content_selectors = [
+                'article',
+                '.content', 
+                '.article-content',
+                '.post-content',
+                '.entry-content',
+                '[class*="content"]',
+                '[class*="article"]',
+                'main'
+            ]
+            
+            for selector in content_selectors:
+                content_area = soup.select_one(selector)
+                if content_area:
+                    break
+            
+            # 如果找不到特定的内容区域，使用整个body
+            if not content_area:
+                content_area = soup.find('body')
+            
+            # 如果连body都找不到，就使用整个soup
+            if not content_area:
+                content_area = soup
+            
+            # 从正文区域提取图片
+            for img in content_area.find_all('img'):
+                src = img.get('src') or img.get('data-src') or img.get('data-original')
+                if src:
+                    # 处理相对路径
+                    full_url = urljoin(base_url, src)
+                    alt = img.get('alt', '')
+
+                    images.append({
+                        'url': full_url,
+                        'alt': alt,
+                        'width': img.get('width'),
+                        'height': img.get('height')
+                    })
+
+            return images
+        except Exception as e:
+            logger.error(f"正文图片提取失败: {e}")
             return []
 
     def extract_publish_time(self, html):
