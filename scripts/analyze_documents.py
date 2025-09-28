@@ -7,13 +7,14 @@ import os
 import sys
 import argparse
 
-from scripts.config import OUTPUT_PATHS
+from scripts.config import OUTPUT_PATHS, LLM_CONFIG
 from src.llm_analysis.llm_report_generator import LLMReportGenerator
 
 
 def main():
     """主函数"""
     config = OUTPUT_PATHS
+
     # 处理默认的JSON文件
     input_files = ['/Users/zhangpeng/Desktop/zpskt/easy-crawler/outdir/cheaa_daily_crawl_20250928_224350.json']
     
@@ -34,9 +35,10 @@ def main():
     
     # 创建输出目录
     os.makedirs(config.get('outdir', 'reports'), exist_ok=True)
-    
+    llm_config = LLM_CONFIG
     # 创建报告生成器并生成报告
-    generator = LLMReportGenerator()
+    generator = LLMReportGenerator(ollama_url=llm_config.get('ollama_url', 'http://localhost:11434/api/generate'),
+                                   model=llm_config.get('model', 'deepseek-r1:7b'))
     summary = generator.analyze_and_generate_report(
         valid_files,
         config.get('outdir', 'reports'),

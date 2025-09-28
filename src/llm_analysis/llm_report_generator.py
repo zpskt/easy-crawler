@@ -17,9 +17,14 @@ logger = logging.getLogger(__name__)
 class LLMReportGenerator:
     """LLM报告生成器类"""
     
-    def __init__(self):
-        """初始化报告生成器"""
-        self.analyzer = LLMAnalyzer()
+    def __init__(self, ollama_url: str = "http://localhost:11434/api/generate", model: str = "deepseek-r1:7b"):
+        """初始化报告生成器
+        
+        Args:
+            ollama_url: Ollama API的URL地址
+            model: 使用的LLM模型名称
+        """
+        self.analyzer = LLMAnalyzer(ollama_url=ollama_url, model=model)
         
     def analyze_and_generate_report(self, input_files: List[str], output_dir: str = '.', 
                                    generate_json: bool = True, generate_html: bool = True) -> Dict:
@@ -97,25 +102,43 @@ class LLMReportGenerator:
 # 使用示例
 if __name__ == "__main__":
     import sys
+    import argparse
     
-    if len(sys.argv) > 1:
-        input_files = sys.argv[1:]
-        output_dir = '../..'
-        
-        # 检查最后一个参数是否为目录
-        if os.path.isdir(input_files[-1]):
-            output_dir = input_files.pop()
-        
-        generator = LLMReportGenerator()
-        summary = generator.analyze_and_generate_report(input_files, output_dir)
-        
-        print(f"\n=== 分析摘要 ===")
-        print(f"处理文件数: {summary['total_files']}")
-        print(f"总文档数: {summary['total_documents']}")
-        print(f"成功分析: {summary['success_count']}")
-        print(f"分析失败: {summary['error_count']}")
-        print(f"\n生成的报告:")
-        for report in summary['reports']:
-            print(f"- {report}")
-    else:
-        print("用法: python llm_report_generator.py <输入JSON文件1> [输入JSON文件2] ... [输出目录]")
+    parser = argparse.ArgumentParser(description='LLM报告生成器')
+    parser.add_argument('input_files', nargs='+', help='输入JSON文件列表')
+    parser.add_argument('--output-dir', default='.', help='输出目录')
+    parser.add_argument('--ollama-url', default='http://localhost:11434/api/generate', help='Ollama API的URL地址')
+    parser.add_argument('--model', default='deepseek-r1:7b', help='使用的LLM模型名称')
+    parser.add_argument('--no-json', action='store_true', help='不生成JSON结果文件')
+    parser.add_argument('--no-html', action='store_true', help='不生成HTML报告')
+    
+    # 如果没有参数，显示帮助信息
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    
+    args = parser.parse_args()
+    
+    # 检查最后一个参数是否为目录（向后兼容）
+    output_dir = args.output_dir
+    input_files = args.input_files
+    
+    if os.path.isdir(input_files[-1]):
+        output_dir = input_files.pop()
+    
+    generator = LLMReportGenerator(ollama_url=args.ollama_url, model=args.model)
+    summary = generator.analyze_and_generate_report(
+        input_files, 
+        output_dir, 
+        generate_json=not args.no_json, 
+        generate_html=not args.no_html
+    )
+    
+    print(f"\n=== 分析摘要 ===")
+    print(f"处理文件数: {summary['total_files']}")
+    print(f"总文档数: {summary['total_documents']}")
+    print(f"成功分析: {summary['success_count']}")
+    print(f"分析失败: {summary['error_count']}")
+    print(f"\n生成的报告:")
+    for report in summary['reports']:
+        print(f"- {report}")
