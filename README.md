@@ -5,11 +5,13 @@
 ## 功能概览
 
 - **中国家电网特定爬虫**：支持多个频道（冰箱、空调、电视影音、洗衣机等）的文章爬取
+- **通用网页爬虫**：支持任意网页的内容提取和链接爬取
 - **智能内容提取**：自动提取文章标题、发布时间、URL和详细内容
 - **向量数据库存储**：基于FAISS的高效语义搜索和文档管理
 - **LLM文档分析**：支持文档摘要、关键词提取和内容分析
 - **知识对话系统**：支持基于向量数据库的问答，可展示文档标题和URL链接
 - **每日自动爬取系统**：支持定时任务，自动爬取、分析并存储最新文章
+- **导出功能**：支持将分析结果导出为Word文档
 
 ## 快速开始
 
@@ -67,6 +69,17 @@ python scripts/daily_crawler_analyzer.py --channels icebox --modules xinpin --ba
 # 指定配置文件
 python scripts/daily_crawler_analyzer.py --config /path/to/your/config.json
 ```
+
+## 通用网页爬虫
+
+系统还提供了一个通用网页爬虫，可以爬取任意网页的内容：
+
+```bash
+# 爬取指定网页列表
+python scripts/crawler_page.py
+```
+
+配置文件位于 [scripts/config.py](file:///Users/zhangpeng/Desktop/zpskt/easy-crawler/scripts/config.py) 中的 `CRAWLER_PAGE_CONFIG` 部分，可以配置要爬取的网页URL列表。
 
 ## 向量数据库功能
 
@@ -135,6 +148,15 @@ python scripts/analyze_documents.py extraction_results.json
 
 # 指定输出目录
 python scripts/analyze_documents.py extraction_results.json --output-dir my_reports
+```
+
+## Word文档导出
+
+支持将分析结果导出为Word文档格式：
+
+```bash
+# 导出分析结果到Word文档
+python scripts/export_to_word.py daily_analysis_20250928.json --output report.docx
 ```
 
 ## 项目结构

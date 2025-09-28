@@ -96,11 +96,17 @@ class UniversalWebExtractor:
             if result_json:
                 data = json.loads(result_json)
                 
+                # 提取带图片标记的内容和图片信息
+                content_with_markers, images = self.extract_content_with_image_markers(html, url)
+                
+                # 如果content_with_markers为空，使用trafilatura提取的内容
+                content = content_with_markers if content_with_markers else data.get('text', '')
+                
                 # 创建结果字典
                 result = {
                     'title': data.get('title', ''),
-                    'content': data.get('text', ''),
-                    'images': self.extract_images_from_content(html, url),
+                    'content': content,
+                    'images': images,
                     'source': 'trafilatura',
                     'excerpt': data.get('excerpt', ''),
                     'author': data.get('author', ''),
@@ -131,14 +137,21 @@ class UniversalWebExtractor:
             title = doc.title()
             content_html = doc.summary()
 
-            # 清理HTML标签，获取纯文本
-            soup = BeautifulSoup(content_html, 'html.parser')
-            content_text = soup.get_text(separator='\n', strip=True)
+            # 提取带图片标记的内容和图片信息
+            content_with_markers, images = self.extract_content_with_image_markers(html, url)
+            
+            # 如果content_with_markers为空，使用readability提取的内容
+            if content_with_markers:
+                content_text = content_with_markers
+            else:
+                # 清理HTML标签，获取纯文本
+                soup = BeautifulSoup(content_html, 'html.parser')
+                content_text = soup.get_text(separator='\n', strip=True)
 
             return {
                 'title': title,
                 'content': content_text,
-                'images': self.extract_images_from_content(html, url),
+                'images': images,
                 'source': 'readability',
                 'excerpt': '',
                 'author': '',
@@ -147,32 +160,6 @@ class UniversalWebExtractor:
         except Exception as e:
             logger.warning(f"Readability提取失败: {e}")
             return None
-
-    def extract_images_from_html(self, html, base_url):
-        """从HTML中提取所有图片"""
-        try:
-            soup = BeautifulSoup(html, 'html.parser')
-            images = []
-
-            # 查找所有img标签
-            for img in soup.find_all('img'):
-                src = img.get('src') or img.get('data-src') or img.get('data-original')
-                if src:
-                    # 处理相对路径
-                    full_url = urljoin(base_url, src)
-                    alt = img.get('alt', '')
-
-                    images.append({
-                        'url': full_url,
-                        'alt': alt,
-                        'width': img.get('width'),
-                        'height': img.get('height')
-                    })
-
-            return images
-        except Exception as e:
-            logger.error(f"图片提取失败: {e}")
-            return []
 
     def extract_images_from_content(self, html, base_url):
         """从HTML正文内容中提取图片"""
@@ -184,7 +171,6 @@ class UniversalWebExtractor:
             content_area = None
             
             # 尝试多种方式定位正文区域
-            # 1. 查找包含文章内容的主要div
             content_selectors = [
                 'article',
                 '.content', 
@@ -228,6 +214,142 @@ class UniversalWebExtractor:
         except Exception as e:
             logger.error(f"正文图片提取失败: {e}")
             return []
+
+    def extract_images_from_content_with_positions(self, html, base_url):
+        """
+        从HTML正文内容中提取图片，并记录它们在正文中的位置信息
+        返回包含图片信息和位置索引的列表
+        """
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 首先尝试获取正文区域，如果无法确定正文区域，则提取所有图片
+            content_area = None
+            
+            # 尝试多种方式定位正文区域
+            content_selectors = [
+                'article',
+                '.content', 
+                '.article-content',
+                '.post-content',
+                '.entry-content',
+                '[class*="content"]',
+                '[class*="article"]',
+                'main'
+            ]
+            
+            for selector in content_selectors:
+                content_area = soup.select_one(selector)
+                if content_area:
+                    break
+            
+            # 如果找不到特定的内容区域，使用整个body
+            if not content_area:
+                content_area = soup.find('body')
+            
+            # 如果连body都找不到，就使用整个soup
+            if not content_area:
+                content_area = soup
+                
+            # 查找正文区域中的所有图片
+            images_with_positions = []
+            
+            if content_area:
+                # 为每个图片创建一个唯一的标识符
+                img_elements = content_area.find_all('img')
+                for i, img in enumerate(img_elements):
+                    src = img.get('src') or img.get('data-src') or img.get('data-original')
+                    if src:
+                        # 处理相对路径
+                        full_url = urljoin(base_url, src)
+                        alt = img.get('alt', '')
+                        
+                        # 获取图片在HTML中的位置信息
+                        images_with_positions.append({
+                            'url': full_url,
+                            'alt': alt,
+                            'width': img.get('width'),
+                            'height': img.get('height'),
+                            'position': i,
+                            'id': f"img_{i}"
+                        })
+                    
+            return images_with_positions
+        except Exception as e:
+            logger.error(f"正文图片提取失败: {e}")
+            return []
+
+    def extract_content_with_image_markers(self, html, base_url):
+        """
+        提取正文内容，并在图片位置插入标记，以便后续在Word/PDF中正确插入图片
+        """
+        try:
+            soup = BeautifulSoup(html, 'html.parser')
+            
+            # 首先尝试获取正文区域
+            content_area = None
+            
+            # 尝试多种方式定位正文区域
+            content_selectors = [
+                'article',
+                '.content', 
+                '.article-content',
+                '.post-content',
+                '.entry-content',
+                '[class*="content"]',
+                '[class*="article"]',
+                'main'
+            ]
+            
+            for selector in content_selectors:
+                content_area = soup.select_one(selector)
+                if content_area:
+                    break
+            
+            # 如果找不到特定的内容区域，使用整个body
+            if not content_area:
+                content_area = soup.find('body')
+            
+            # 如果连body都找不到，就使用整个soup
+            if not content_area:
+                content_area = soup
+                
+            # 创建内容副本用于处理
+            content_copy = BeautifulSoup(str(content_area), 'html.parser') if content_area else BeautifulSoup(str(soup), 'html.parser')
+                
+            # 为每个图片添加标记
+            img_elements = content_copy.find_all('img')
+            images = []
+            
+            for i, img in enumerate(img_elements):
+                src = img.get('src') or img.get('data-src') or img.get('data-original')
+                if src:
+                    # 处理相对路径
+                    full_url = urljoin(base_url, src)
+                    alt = img.get('alt', '')
+                    
+                    # 保存图片信息
+                    image_info = {
+                        'url': full_url,
+                        'alt': alt,
+                        'width': img.get('width'),
+                        'height': img.get('height'),
+                        'id': f"img_{i}"
+                    }
+                    images.append(image_info)
+                    
+                    # 用标记替换图片
+                    marker = content_copy.new_tag('span')
+                    marker.string = f"[IMAGE_PLACEHOLDER_{i}]"
+                    img.replace_with(marker)
+            
+            # 获取处理后的内容文本
+            content_text = content_copy.get_text(separator='\n', strip=True)
+            
+            return content_text, images
+        except Exception as e:
+            logger.error(f"提取带图片标记的内容失败: {e}")
+            return "", []
 
     def extract_publish_time(self, html):
         """从HTML中提取发布时间，特别针对中国家电网的页面结构"""
