@@ -9,6 +9,7 @@
 - **向量数据库存储**：基于FAISS的高效语义搜索和文档管理
 - **LLM文档分析**：支持文档摘要、关键词提取和内容分析
 - **知识对话系统**：支持基于向量数据库的问答，可展示文档标题和URL链接
+- **每日自动爬取系统**：支持定时任务，自动爬取、分析并存储最新文章
 
 ## 快速开始
 
@@ -53,15 +54,18 @@ python -m src.business.cheaa_crawler crawl --channels icebox ac --modules xinpin
 
 ### 完整爬虫脚本
 
-`scripts/cheaa_full_crawler.py`提供完整爬取流程，支持自动保存到FAISS向量数据库：
+`scripts/daily_crawler_analyzer.py`提供完整爬取流程，支持自动保存到FAISS向量数据库和MySQL数据库：
 
 ```bash
 # 爬取指定频道和模块并保存到向量数据库
 source activate crawler_env
-python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin
+python scripts/daily_crawler_analyzer.py --channels icebox --modules xinpin
 
 # 限制爬取文章数量和请求间隔
-python scripts/cheaa_full_crawler.py --channels icebox --modules xinpin --batch-size 10 --delay 3
+python scripts/daily_crawler_analyzer.py --channels icebox --modules xinpin --batch-size 10 --delay 3
+
+# 指定配置文件
+python scripts/daily_crawler_analyzer.py --config /path/to/your/config.json
 ```
 
 ## 向量数据库功能
@@ -98,7 +102,7 @@ python scripts/vector_query.py stats
 
 ```bash
 # 启动API服务器
-python api_server.py
+python scripts/api_server.py
 
 # 启动前端界面
 cd web
@@ -121,16 +125,16 @@ npm run dev
 - 自动分析文档内容，提取摘要、关键词和关键点
 - 支持批量分析多个文档
 - 生成HTML分析报告
-_- 可扩展支持真实的LLM API调用
+- 可扩展支持真实的LLM API调用
 
-### 使用方法_
+### 使用方法
 
 ```bash
 # 分析文档文件
-python analyze_documents.py extraction_results.json
+python scripts/analyze_documents.py extraction_results.json
 
 # 指定输出目录
-python analyze_documents.py extraction_results.json --output-dir my_reports
+python scripts/analyze_documents.py extraction_results.json --output-dir my_reports
 ```
 
 ## 项目结构
@@ -139,23 +143,34 @@ python analyze_documents.py extraction_results.json --output-dir my_reports
 easy-crawler/
 ├── src/                    # 源代码目录
 │   ├── business/           # 业务逻辑
+│   ├── core/               # 核心爬虫模块
 │   ├── storage/            # 存储模块（向量数据库）
-│   ├── utils/              # 工具函数
-│   └── llm_analysis/       # LLM分析模块
+│   ├── llm_analysis/       # LLM分析模块
+│   └── config/             # 配置文件
 ├── scripts/                # 实用脚本
 ├── web/                    # 前端界面
+├── daily_reports/          # 每日报告目录
+├── outdir/                 # 输出目录
 ├── api_server.py           # API服务器
-├── vector_index.faiss      # 向量索引文件
-├── vector_metadata.json    # 元数据文件
 └── requirements.txt        # 项目依赖
+```
+
+## 定时任务
+
+系统支持通过cron（Linux/macOS）或任务计划程序（Windows）设置定时任务，实现每日自动爬取和分析：
+
+```bash
+# Linux/macOS cron示例 - 每天凌晨2点执行
+0 2 * * * cd /path/to/easy-crawler && python scripts/daily_crawler_analyzer.py >> daily_crawler.log 2>&1
 ```
 
 ## 注意事项
 
 1. 对于动态页面，使用`--use-selenium`选项
 2. 频繁请求可能被限制，请适当控制请求频率
-3. 集成真实LLM API时，需修改`LLMAnalyzer`类中的相关配置
+3. 集成真实LLM API时，需修改[LLMAnalyzer](file:///Users/zhangpeng/Desktop/zpskt/easy-crawler/src/llm_analysis/llm_analyzer.py#L25-L590)类中的相关配置
 4. 向量数据库默认使用绝对路径存储，请确保路径配置正确
+5. 确保已安装Chrome浏览器和对应的ChromeDriver以支持Selenium功能
 
 ## 常见问题
 
@@ -170,3 +185,8 @@ easy-crawler/
 
 ### 知识对话不显示URL
 - 确保已更新到最新版本，API服务器中已添加URL展示功能
+
+### 定时任务不执行
+- 检查cron表达式是否正确
+- 确认脚本路径和Python路径是否正确
+- 查看日志文件了解错误详情
